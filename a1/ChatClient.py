@@ -4,7 +4,7 @@ import sys
 import time
 import traceback
 
-DEFAULT_HOST="localhost"
+DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
 
 def getClientSocket(host,port):
@@ -36,19 +36,25 @@ def startClient(host,port):
       if time.time() - lastKeepAlive > 2:
         lastKeepAlive = time.time()
         s.send('KeepAlive')
+        print('Sent keep alive at ' + str(lastKeepAlive))
         
       multicastGroupData,serverAddr=s.recvfrom(1024)
       if '|' in multicastGroupData:
         if receiverSocket is None:
           ip,port=multicastGroupData.split('|')
+          print('Received multicast group info ip: ' + ip + ' port: ' + port)
           receiverSocket = startMulticastReceiver(ip,int(port))
         else:
           pass #normal keepalive, working as expected
       else:
         print('Error from server keepalive, no | character')
-      data, addr = receiverSocket.recvfrom(1024)
     except socket.error, e:
       traceback.print_exc()
+      pass
+    try:
+      data, addr = receiverSocket.recvfrom(1024)
+      print('('+str(addr)+'): ' + data)
+    except:
       pass
 
 if __name__ == "__main__":

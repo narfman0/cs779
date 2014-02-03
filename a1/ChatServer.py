@@ -16,6 +16,7 @@ def generateMulticastGroupIP():
 def getServerSocket(port):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.bind((socket.gethostname(), port))
+  print('Bound socket to host: ' + socket.gethostname() + ' on port: ' + str(port))
   s.listen(5)
   return s
 
@@ -28,16 +29,26 @@ def removeOldConnections(connectedTimeMap):
 def receiveData(s,connectedTimeMap):
   try:
     data, addr = s.recvfrom(1024) #doesn't block
-    connectedTimeMap[addr] = time.time()
+    if not addr is None:
+      connectedTimeMap[addr] = time.time()
+      print('Data received from client: ' + str(addr) + ' data: ' + data)
   except socket.error, e:
     pass
 
 #Send ip/port to all connected (keepalive response)
 def sendMulticastInfo(s,multicastGroupPort,multicastGroupIP):
   try:
-    s.sendall(str(multicastGroupPort) + '|' + multicastGroupIP)
+    s.sendall(multicastGroupIP + '|' + str(multicastGroupPort))
   except socket.error, e:
     pass
+  
+def accept(s,connectedTimeMap,multicastGroupPort,multicastGroupIP):
+  client, address = s.accept()
+  print('Accepted client ' + str(address))
+  while True:
+    receiveData(client,connectedTimeMap)
+    removeOldConnections(connectedTimeMap)
+    sendMulticastInfo(client,multicastGroupPort,multicastGroupIP)
 
 def startServer(port):
   s=getServerSocket(port)
@@ -45,14 +56,7 @@ def startServer(port):
   multicastGroupIP=generateMulticastGroupIP()
   connectedTimeMap={}
   while True:
-    try:
-      s.accept()
-    except:
-      traceback.print_exc()
-      pass
-    receiveData(s,connectedTimeMap)
-    removeOldConnections(connectedTimeMap)
-    sendMulticastInfo(s,multicastGroupPort,multicastGroupIP)
+    accept(s,connectedTimeMap,multicastGroupPort,multicastGroupIP)
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:

@@ -63,6 +63,7 @@ def startServer(port):
                 if data is None or data == '':
                   print "Client (%s, %s) disconnected" % addr
                   connected.remove(addr)
+                  connectionList.remove(sock)
                   sock.close()
             except:
                 print "Client (%s, %s) is offline" % addr

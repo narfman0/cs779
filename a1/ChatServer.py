@@ -51,7 +51,7 @@ def startServer(port):
             sockfd, addr = s.accept()
             connectionList.append(sockfd)
             print "Client (%s, %s) connected" % addr
-            connected.append(addr)
+            connected.append(str(sockfd.getpeername()))
             sendMulticastInfo(sockfd,multicastGroupPort,multicastGroupIP)
         #Some incoming message from a client
         else:
@@ -61,13 +61,13 @@ def startServer(port):
                 # a "Connection reset by peer" exception will be thrown
                 data = sock.recv(1024) #doesn't block
                 if data is None or data == '':
-                  print "Client (%s, %s) disconnected" % addr
-                  connected.remove(addr)
+                  print "Client (%s, %s) disconnected" % sock.getpeername()
+                  connected.remove(str(sock.getpeername()))
                   connectionList.remove(sock)
                   sock.close()
             except:
-                print "Client (%s, %s) is offline" % addr
-                connected.remove(addr)
+                print "Client (%s, %s) is offline" % sock.getpeername()
+                connected.remove(sock.getpeername())
                 sock.close()
                 connectionList.remove(sock)
                 continue

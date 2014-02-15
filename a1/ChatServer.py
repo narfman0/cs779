@@ -1,5 +1,5 @@
 #!/bin/python
-import select, signal, socket, sys, time
+import select, signal, socket, sys
 from random import randint
 
 DEFAULT_PORT=10009
@@ -24,21 +24,17 @@ def sendMulticastInfo(s,multicastGroupPort,multicastGroupIP):
   except socket.error, e:
     pass
 
-def printConnected(connectedTimeMap):
+def printConnected(connected):
   print('Clients connected:')
-  for key,value in connectedTimeMap.iteritems():
-    if time.time() - value > 5:#older than 5 seconds
-      del connectedTimeMap[key]
-      print('Removing connection which has not been kept alive within 5 seconds ' + key)
-    else:
-      print(key)
+  for value in connected:
+    print(value)
 
 def startServer(port):
   s=getServerSocket(port)
   multicastGroupPort=generateMulticastGroupPort()
   multicastGroupIP=generateMulticastGroupIP()
-  connectedTimeMap={}
-  signal_handler = lambda signum,frame: printConnected(connectedTimeMap)
+  connected=[]
+  signal_handler = lambda signum,frame: printConnected(connected)
   signal.signal(signal.SIGINT, signal_handler)
   
   connectionList=[s]
@@ -52,7 +48,7 @@ def startServer(port):
             sockfd, addr = s.accept()
             connectionList.append(sockfd)
             print "Client (%s, %s) connected" % addr
-            connectedTimeMap[addr] = time.time()
+            connected.append(addr)
             sendMulticastInfo(sockfd,multicastGroupPort,multicastGroupIP)
         #Some incoming message from a client
         else:
@@ -60,13 +56,14 @@ def startServer(port):
             try:
                 #In Windows, sometimes when a TCP program closes abruptly,
                 # a "Connection reset by peer" exception will be thrown
-                data,addr = sock.recvfrom(1024) #doesn't block
-                if not addr is None:
-                  connectedTimeMap[addr] = time.time()
-                  print("Received data from " + addr)
+                data = sock.recv(1024) #doesn't block
+                if data is None or data == '':
+                  print "Client (%s, %s) disconnected" % addr
+                  connected.remove(addr)
+                  sock.close()
             except:
                 print "Client (%s, %s) is offline" % addr
-                del connectedTimeMap[addr]
+                connected.remove(addr)
                 sock.close()
                 connectionList.remove(sock)
                 continue

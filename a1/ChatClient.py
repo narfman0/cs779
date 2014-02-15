@@ -1,8 +1,5 @@
 #!/bin/python
-import socket
-import sys
-import time
-import traceback
+import select,socket,sys,traceback
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
@@ -14,11 +11,7 @@ def getClientSocket(host,port):
 
 def startMulticastReceiver(group, port):
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-  try:
-    s.seckopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-  except AttributeError:
-    traceback.print_exc()
-    return None
+  s.seckopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32) 
   s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
   s.bind((group, port))
@@ -31,32 +24,31 @@ def startMulticastReceiver(group, port):
 def startClient(host,port):
   s = getClientSocket(host,port)
   receiverSocket = None
-  lastKeepAlive=0
+  socket_list = [sys.stdin, s]
   while True:
-    try:
-      if time.time() - lastKeepAlive > 2:
-        lastKeepAlive = time.time()
-        s.send('KeepAlive')
-        print('Sent keep alive at ' + str(lastKeepAlive))
-        
-      multicastGroupData,serverAddr=s.recvfrom(1024)
-      if '|' in multicastGroupData:
-        if receiverSocket is None:
-          ip,port=multicastGroupData.split('|')
-          print('Received multicast group info ip: ' + ip + ' port: ' + port)
-          receiverSocket = startMulticastReceiver(ip,int(port))
-        else:
-          pass #normal keepalive, working as expected
-      else:
-        print('Error from server keepalive, no | character')
-    except socket.error, e:
-      traceback.print_exc()
-      pass
-    try:
-      data, addr = receiverSocket.recvfrom(1024)
-      print('('+str(addr)+'): ' + data)
-    except:
-      pass
+    read_sockets, write_sockets, error_sockets = select.select(socket_list , [], [])
+    for sock in read_sockets:
+      #incoming message from remote server
+      if sock == s:
+        data = sock.recv(1024)
+        if not data :
+          print 'Disconnected from server'
+          sock.close()
+          sys.exit()
+        else :
+          #print data
+          if '|' in data and receiverSocket is None:
+            ip,port=data.split('|')
+            print('Received multicast group info ip: ' + ip + ' port: ' + port)
+            try:
+              receiverSocket = startMulticastReceiver(ip,int(port))
+              socket_list.append(receiverSocket)
+            except:
+              print('Error connecting to multicast group')
+      #user entered a message
+      elif receiverSocket != None:
+        msg = sys.stdin.readline()
+        receiverSocket.send(msg)
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:

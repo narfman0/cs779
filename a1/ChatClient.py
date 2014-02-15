@@ -18,6 +18,7 @@ def startMulticastReceiver(group, port):
     s.seckopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   except AttributeError:
     traceback.print_exc()
+    return None
   s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32) 
   s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
   s.bind((group, port))

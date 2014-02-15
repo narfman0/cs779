@@ -45,10 +45,23 @@ def startClient(host,port):
               socket_list.append(receiverSocket)
             except:
               print('Error connecting to multicast group')
+              traceback.print_exc()
+              sys.exit()
       #user entered a message
-      elif receiverSocket != None:
+      elif sock == sys.stdin:
         msg = sys.stdin.readline()
-        receiverSocket.send(msg)
+        if receiverSocket != None:
+          receiverSocket.send(msg)
+        else:
+          print('Multicast socket null, reconnect!')
+      elif sock == receiverSocket:
+        data = sock.recv(1024)
+        if not data or data == '':
+          sock.close()
+          print('Error, data null or empty, disconnected from multicast group')
+          sys.exit()
+        else:
+          print(data) 
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:

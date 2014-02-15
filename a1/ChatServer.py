@@ -25,9 +25,12 @@ def sendMulticastInfo(s,multicastGroupPort,multicastGroupIP):
     pass
 
 def printConnected(connected):
-  print('Clients connected:')
-  for value in connected:
-    print(value)
+  if len(connected) > 0:
+    print('Clients connected:')
+    for value in connected:
+      print(value)
+  else:
+    print('No clients connected!')
 
 def startServer(port):
   s=getServerSocket(port)

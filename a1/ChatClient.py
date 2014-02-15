@@ -38,7 +38,6 @@ def startClient(host,port):
           sock.close()
           sys.exit()
         else :
-          #print data
           if '|' in data and recv_sock is None:
             mcast_group, mcast_port_str = data.split('|')
             mcast_port = int(mcast_port_str)
@@ -50,11 +49,10 @@ def startClient(host,port):
               print('Error connecting to multicast group')
               traceback.print_exc()
               sys.exit()
-      #user entered a message
       elif sock == sys.stdin:
         msg = sys.stdin.readline()
         if msg != '':
-          send_sock.sendto(str(send_sock.getsockname()) + ': ' + msg, (mcast_group, mcast_port))
+          send_sock.sendto(str(s.getsockname()) + ': ' + msg, (mcast_group, mcast_port))
         else:
           print('No chars or ctrl-d pressed, quitting')
           sys.exit()

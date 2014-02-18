@@ -73,5 +73,5 @@ if __name__ == "__main__":
     port=DEFAULT_PORT
   else:
     host=sys.argv[1]
-    port=sys.argv[2]
+    port=int(sys.argv[2])
   startClient(host,port)

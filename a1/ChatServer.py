@@ -80,5 +80,5 @@ if __name__ == "__main__":
     print('No port given as argument 1, defaulting to ' + str(DEFAULT_PORT))
     port=DEFAULT_PORT
   else:
-    port=sys.argv[1]
+    port=int(sys.argv[1])
   startServer(port)

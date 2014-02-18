@@ -66,7 +66,7 @@ def startClient(host,port):
           print(data) 
 
 if __name__ == "__main__":
-  if len(sys.argv) != 2:
+  if len(sys.argv) != 3:
     print('No host given as argument 1, defaulting to ' + DEFAULT_HOST)
     print('No port given as argument 2, defaulting to ' + str(DEFAULT_PORT))
     host=DEFAULT_HOST

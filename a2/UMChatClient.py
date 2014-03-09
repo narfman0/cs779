@@ -19,12 +19,15 @@ def startMulticastReceiver(group, port):
 def printSocket(host,port):
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   s.bind((host,port))
+  print('Printing messages from ' + str((host,port)))
   while True:
     try:
       (data, address) = s.recvfrom(1024)
       print(str(address) + ": " + data)
     except:
       pass
+  s.close()
+  sys.exit()
 
 def mcastClient(s, host, port):
   s.send('0') # sends "0" & receives M, P, L and E.
@@ -48,6 +51,21 @@ def sigQuit(s, us, e, listPrinter, socketPrinter, p):
   us.sendto(str(e),(host,p))
   close(s, us, e, listPrinter, socketPrinter)
 
+def printList(host, p):
+  usRead=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  print('Binding to ' + str((host,p)))
+  usRead.bind((host,p))
+  while True:
+    try:
+      data = usRead.recv(1024)
+      if data == '':
+        break
+      print('Printing LIST:\n' + data)
+    except:
+      pass
+  usRead.close()
+  sys.exit()
+
 def unicastClient(s, host, port):
   s.send('1') # sends "1" & receives P, L and E.
   p = int(s.recv(5))
@@ -55,31 +73,23 @@ def unicastClient(s, host, port):
   e = int(s.recv(7))
   s.settimeout(1)
   print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
+  
   listPrinter=os.fork()
-  socketPrinter=os.fork()
   if(listPrinter == 0):
-    usRead=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    usRead.bind((host,p))
-    while True:
-      try:
-        data = usRead.recv(1024)
-        if data == '':
-          break
-        print('Printing LIST:\n' + data)
-      except:
-        pass
-  elif(socketPrinter == 0):
+    printList(host,p)
+  socketPrinter=os.fork()
+  if(socketPrinter == 0):
     printSocket(host, port)
-  else:
-    us=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    signal.signal(signal.SIGINT, lambda signum,frame: us.sendto(str(l),(host,p)))#ctrl-c
-    signal.signal(signal.SIGQUIT, lambda signum,frame: sigQuit(s, us, e, listPrinter, socketPrinter, p))#ctrl-/
-    while True:
-      msg = sys.stdin.readline().strip()
-      if msg != '':
-        us.sendto(msg,(host,p))
-      else:
-        close(s, us, e, listPrinter, socketPrinter)
+ 
+  us=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  signal.signal(signal.SIGINT, lambda signum,frame: us.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: sigQuit(s, us, e, listPrinter, socketPrinter, p))#ctrl-/
+  while True:
+    msg = sys.stdin.readline().strip()
+    if msg != '':
+      us.sendto(msg,(host,p))
+    else:
+      close(s, us, e, listPrinter, socketPrinter)
 
 def startClient(host,port,socketType):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

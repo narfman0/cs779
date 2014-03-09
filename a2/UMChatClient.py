@@ -34,6 +34,19 @@ def mcastClient(s, host, port):
   e = int(s.recv(7))
   print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
   _recv_sock, _send_sock = startMulticastReceiver(m, p)
+  
+def close(s, us, e, listPrinter, socketPrinter):
+  print('No chars or ctrl-d pressed, quitting')
+  us.close()
+  s.send(str(e))
+  s.close()
+  os.kill(listPrinter, signal.SIGKILL)
+  os.kill(socketPrinter, signal.SIGKILL)
+  sys.exit()
+
+def sigQuit(s, us, e, listPrinter, socketPrinter, p):
+  us.sendto(str(e),(host,p))
+  close(s, us, e, listPrinter, socketPrinter)
 
 def unicastClient(s, host, port):
   s.send('1') # sends "1" & receives P, L and E.
@@ -45,9 +58,11 @@ def unicastClient(s, host, port):
   listPrinter=os.fork()
   socketPrinter=os.fork()
   if(listPrinter == 0):
+    usRead=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    usRead.bind((host,p))
     while True:
       try:
-        data = s.recv(1024)
+        data = usRead.recv(1024)
         if data == '':
           break
         print('Printing LIST:\n' + data)
@@ -56,22 +71,15 @@ def unicastClient(s, host, port):
   elif(socketPrinter == 0):
     printSocket(host, port)
   else:
-    signal.signal(signal.SIGINT, lambda signum,frame: s.send(str(l)))#ctrl-c
-    signal.signal(signal.SIGQUIT, lambda signum,frame: s.send(str(e)))#ctrl-/
     us=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    signal.signal(signal.SIGINT, lambda signum,frame: us.sendto(str(l),(host,p)))#ctrl-c
+    signal.signal(signal.SIGQUIT, lambda signum,frame: sigQuit(s, us, e, listPrinter, socketPrinter, p))#ctrl-/
     while True:
       msg = sys.stdin.readline().strip()
       if msg != '':
         us.sendto(msg,(host,p))
       else:
-        print('No chars or ctrl-d pressed, quitting')
-        us.close()
-        s.send(str(e))
-        s.close()
-        os.kill(listPrinter, signal.SIGKILL)
-        os.kill(socketPrinter, signal.SIGKILL)
-        sys.exit()
-    
+        close(s, us, e, listPrinter, socketPrinter)
 
 def startClient(host,port,socketType):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

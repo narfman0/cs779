@@ -2,10 +2,10 @@
 import select, signal, socket, sys, time
 from random import randint
 
-DEFAULT_PORT=10010
+DEFAULT_PORT=10009
 
 def generateMulticastGroupPort():
-  return randint(9999,11001)
+  return randint(10000,11001)
 
 def generateMulticastGroupIP():
   return str(randint(224,239)) + '.' + str(randint(0,255)) + '.' + str(randint(0,255)) + '.' + str(randint(0,255))
@@ -55,20 +55,7 @@ def startServer(port):
             time.sleep(1)
         elif sock == u:
             (data,address) = u.recvfrom(1024)
-            if address not in connectedClients:
-              connectedClients[address]=username
-              print('New UDP Client: ' + str(address) + '[' + username + ']')
-              _type=sockfd.recv(1)
-              sockfd.send(str(m))
-              time.sleep(1)
-              sockfd.send(str(p))
-              time.sleep(1)
-              sockfd.send(str(l))
-              time.sleep(1)
-              sockfd.send(str(e))
-              time.sleep(1)
-            else:
-              print('Forward message to multicast group. Msg: ' + data)
+            print(str(address) + ': ' + data)
         #Some incoming message from a client
         else:
             # Data received from client, process it
@@ -80,6 +67,13 @@ def startServer(port):
                   print "Client (%s, %s) disconnected" % sock.getpeername()
                   del connectedClients[sock.getpeername()]
                   sock.close()
+                try:
+                  dataNumber = int(data)
+                  if dataNumber == l:
+                    print('Received l, sending list to connection')
+                    sock.send(str(connectedClients))
+                except:
+                  pass
             except:
                 print "Client (%s, %s) is offline" % sock.getpeername()
                 del connectedClients[sock.getpeername()]

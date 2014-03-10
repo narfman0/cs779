@@ -6,15 +6,15 @@ DEFAULT_PORT=10009
 DEFAULT_TYPE='m'
 
 def startMulticastReceiver(group, port):
-  recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-  recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-  recv_sock.bind(('', port))
+  ur = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  ur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  ur.bind((group, port))
   mreq = struct.pack("4sl", socket.inet_aton(group), socket.INADDR_ANY)
-  recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+  ur.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
   
-  send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-  send_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-  return (recv_sock,send_sock)
+  us = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  us.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+  return (ur,us)
 
 def mcastClient(s, host, port):
   s.send('0') # sends "0" & receives M, P, L and E.
@@ -66,7 +66,7 @@ def unicastClient(s, host):
   
   u=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)#shouldn't be necessary but if same host it binds over the server soooo
-  u.bind((host,p))
+  u.bind((host, s.getsockname()[1]))
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host))#ctrl-/
   socket_list = [sys.stdin, u]

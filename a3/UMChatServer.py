@@ -32,21 +32,28 @@ def startServer(port):
   u.bind((socket.gethostname(), p))
   print "Bound to %s" % str(socket.gethostname())
   
-  connectedClients={}
-  signal.signal(signal.SIGINT, lambda signum,frame: printConnected(connectedClients))
+  connectedUnicast={}
+  connectedMulticast={}
+  signal.signal(signal.SIGINT, lambda signum,frame: printConnected(connectedUnicast,connectedMulticast))
   socket_list = [sys.stdin, s, u]
   while True:
     try:
-      read_sockets,_write_sockets,_error_sockets = select.select(socket_list,[],[])
+      read_sockets,_w,_e = select.select(socket_list,[],[])
       for sock in read_sockets:
         #New connection
         if sock == s:
             # Handle the case in which there is a new connection recieved through server_socket
             sockfd, _addr = s.accept()
-            username=sockfd.recv(1024)
-            connectedClients[sockfd.getpeername()]=username
-            print('New TCP Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-            _type=sockfd.recv(1)
+            username = sockfd.recv(1024)
+            clientType = sockfd.recv(1)
+            if clientType == '0':
+              print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
+              connectedUnicast[sockfd.getpeername()] = username
+              sockfd.send(str(m))
+              time.sleep(1)
+            else:
+              print('New UC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
+              connectedMulticast[sockfd.getpeername()] = username
             sockfd.send(str(p))
             time.sleep(1)
             sockfd.send(str(l))
@@ -65,18 +72,21 @@ def startServer(port):
                 data = sock.recv(1024) #doesn't block
                 if data is None or data == '':
                   print "Client (%s, %s) disconnected" % sock.getpeername()
-                  del connectedClients[sock.getpeername()]
+                  del connectedUnicast[sock.getpeername()]
+                  del connectedMulticast[sock.getpeername()]
                   sock.close()
                 try:
                   dataNumber = int(data)
                   if dataNumber == l:
                     print('Received l, sending list to connection')
-                    sock.send(str(connectedClients))
+                    sock.send('Unicast: ' + str(connectedUnicast) + 
+                              'Multicast: ' + str(connectedMulticast))
                 except:
                   pass
             except:
                 print "Client (%s, %s) is offline" % sock.getpeername()
-                del connectedClients[sock.getpeername()]
+                del connectedUnicast[sock.getpeername()]
+                del connectedMulticast[sock.getpeername()]
                 sock.close()
                 continue
     except:

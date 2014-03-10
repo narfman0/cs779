@@ -3,7 +3,7 @@ import getpass, os, select, signal, socket, struct, sys, time, traceback
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
-DEFAULT_TYPE='u'
+DEFAULT_TYPE='m'
 
 def startMulticastReceiver(group, port):
   recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -22,8 +22,33 @@ def mcastClient(s, host, port):
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
+  (ur,us) = startMulticastReceiver(m, p)
   print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
-  _recv_sock, _send_sock = startMulticastReceiver(m, p)
+  
+  signal.signal(signal.SIGINT, lambda signum,frame: us.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, us, e, p, host))#ctrl-/
+  socket_list = [sys.stdin, ur]
+  while True:
+    try:
+      read_sockets, _w, _e = select.select(socket_list , [], [])
+      for sock in read_sockets:
+        if sock == ur:
+          (data, address) = ur.recvfrom(1024)
+          if data != str(e) and data != str(l):
+            print(str(address) + ": " + data)
+          else:
+            print('Remote received: ' + data)
+        elif sock == sys.stdin:
+          msg = sys.stdin.readline()
+          if msg != '':
+            us.sendto(msg, (host,p))
+          else:
+            close(s, us, e, p, host)
+    except select.error  as ex:
+      if ex[0] == 4:#catch interrupted system call, do nothing
+        continue
+      else:
+        raise
   
 def close(s, u, e, p, host):
   print('No chars or ctrl-d pressed, quitting')
@@ -32,7 +57,7 @@ def close(s, u, e, p, host):
   s.close()
   sys.exit(1)
 
-def unicastClient(s, host, port):
+def unicastClient(s, host):
   s.send('1') # sends "1" & receives P, L and E.
   p = int(s.recv(5))
   l = int(s.recv(7))
@@ -40,17 +65,21 @@ def unicastClient(s, host, port):
   print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
   
   u=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  u.bind((host,port))
+  u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)#shouldn't be necessary but if same host it binds over the server soooo
+  u.bind((host,p))
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host))#ctrl-/
-  socket_list = [sys.stdin]
+  socket_list = [sys.stdin, u]
   while True:
     try:
       read_sockets, _w, _e = select.select(socket_list , [], [])
       for sock in read_sockets:
         if sock == u:
-          data = s.recv(1024)
-          print(str(127) + ": " + data)
+          (data, address) = u.recvfrom(1024)
+          if data != str(e) and data != str(l):
+            print(str(address) + ": " + data)
+          else:
+            print('Remote received: ' + data)
         elif sock == sys.stdin:
           msg = sys.stdin.readline()
           if msg != '':
@@ -71,7 +100,7 @@ def startClient(host,port,socketType):
   if socketType == 'm':
     mcastClient(s, host, port)
   else:
-    unicastClient(s, host, port)
+    unicastClient(s, host)
 
 if __name__ == "__main__":
   if len(sys.argv) != 4:

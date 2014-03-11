@@ -1,5 +1,5 @@
 #!/bin/python
-import select, signal, socket, sys, time
+import select, signal, socket, struct, sys, time
 from random import randint
 
 DEFAULT_PORT=10009
@@ -22,6 +22,17 @@ def close(s,u):
   s.close()
   u.close()
 
+def startMulticastReceiver(group, port):
+  ur = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  ur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  ur.bind((group, port))
+  mreq = struct.pack("4sl", socket.inet_aton(group), socket.INADDR_ANY)
+  ur.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+  
+  us = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  us.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+  return (ur,us)
+
 def removeClient(s,u,m):
   try:
     del u[s.getpeername()]
@@ -37,19 +48,21 @@ def startServer(port):
   e=generateNumber()
   p=generateMulticastGroupPort()
   m=generateMulticastGroupIP()
-  print "Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m)
   
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.bind((socket.gethostname(), port))
   s.listen(1)
   u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.bind((socket.gethostname(), p))
-  print "Bound to %s" % str(socket.gethostname())
+  (mr,ms) = startMulticastReceiver(m, p)
+  
+  print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) +
+    "\non %s" % str(socket.gethostname()))
   
   uList={}
   mList={}
   signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList))
-  socket_list = [sys.stdin, s, u]
+  socket_list = [sys.stdin, s, u, mr]
   while True:
     try:
       read_sockets,_w,_e = select.select(socket_list,[],[])
@@ -89,13 +102,15 @@ def startServer(port):
                 print('Received l, sending list to connection')
                 sock.send('Unicast: ' + str(uList) + 
                           'Multicast: ' + str(mList))
-              if dataNumber == e:
+              elif dataNumber == e:
                 print('Received e, goodbye person!')
                 removeClient(sock,uList,mList)
             except:
-              pass
-            print(str(address) + ': ' + data)
-        #Some incoming message from a client
+              print(str(address) + ': ' + data)
+              ms.sendto(data, (m,p))
+        elif sock == u:
+            #TODO send to unicast
+            pass
         else:
             # Data received from client, process it
             try:

@@ -3,7 +3,7 @@ import getpass, os, select, signal, socket, struct, sys, time, traceback
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
-DEFAULT_TYPE='m'
+DEFAULT_TYPE='u'
 
 def startMulticastReceiver(group, port):
   ur = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -66,7 +66,7 @@ def unicastClient(s, host):
   
   u=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)#shouldn't be necessary but if same host it binds over the server soooo
-  u.bind((host, s.getsockname()[1]))
+  u.bind((socket.gethostname(), s.getsockname()[1]))
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host))#ctrl-/
   socket_list = [sys.stdin, u]

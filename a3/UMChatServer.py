@@ -104,12 +104,12 @@ def startServer(port):
             sockfd.settimeout(None)
             if clientType == '0':
               print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-              uList[sockfd] = username
+              mList[sockfd] = username
               sockfd.send(str(m))
               time.sleep(1)
             else:
               print('New UC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-              mList[sockfd] = username
+              uList[sockfd] = username
             sockfd.send(str(p))
             time.sleep(1)
             sockfd.send(str(l))
@@ -118,13 +118,15 @@ def startServer(port):
             time.sleep(1)
             socket_list.append(sockfd)
         elif sock == u:#received unicast, send to multicast
-            data = handleClientMessage(sock, l, e, uList, mList)
-            if(data[0]):
+            (success,data) = handleClientMessage(sock, l, e, uList, mList)
+            if(success):
               ms.sendto(data, (m,p))
+              for uClient in uList:
+                uClient.sendto(data, uClient.getpeername())
         elif sock == mr:#received multicast, send to each unicast client
-            data = handleClientMessage(sock, l, e, uList, mList)
-            if(data[0]):
-              [uClient.sendto(data) for uClient in uList]
+            (success,data) = handleClientMessage(sock, l, e, uList, mList)
+            if(success):
+              [uClient.sendto(data, uClient.getpeername()) for uClient in uList]
         else:
             # Data received from client, process it
             try:

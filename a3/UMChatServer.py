@@ -13,10 +13,22 @@ def generateMulticastGroupIP():
 def generateNumber():
   return randint(1000000,9999999)
 
-def printConnected(connected):
-  print('Connected clients:')
-  for user,address in connected.items():
-    print('User: ' + user + ' address: ' + str(address))
+def getConnectedString(connected):
+  s=''
+  for socket in connected.items():
+    for user,address in socket.getpeername():
+      s += 'User: ' + user + ' address: ' + str(address) + '\n'
+  return s
+
+def getConnectedString(uList, mList):
+  s  = 'Connected UDP clients:\n'
+  s += getConnectedString(uList)
+  s += 'Connected MCast clients:\n'
+  s += getConnectedString(mList)
+  return s
+
+def printConnected(uList, mList):
+  print(getConnectedString(uList, mList))
 
 def close(s,u):
   s.close()
@@ -34,14 +46,25 @@ def startMulticastReceiver(group, port):
   return (ur,us)
 
 def removeClient(s,u,m):
+  if s in u:
+    del u[s]
+  if s in m:
+    del m[s]
+
+def handleClientMessage(s, l, e, uList, mList):
+  (data,address) = s.recvfrom(1024)
   try:
-    del u[s.getpeername()]
+    dataNumber = int(data)
+    if dataNumber == l:
+      print('Received l, sending list to connection')
+      s.send(getConnectedString(uList, mList))
+    elif dataNumber == e:
+      print('Received e, goodbye person!')
+      removeClient(s,uList,mList)
   except:
-    pass
-  try:
-    del m[s.getpeername()]
-  except:
-    pass
+    print(str(address) + ': ' + data)
+    return (True,data)
+  return (False,0)
 
 def startServer(port):
   l=generateNumber()
@@ -56,8 +79,8 @@ def startServer(port):
   u.bind((socket.gethostname(), p))
   (mr,ms) = startMulticastReceiver(m, p)
   
-  print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) +
-    "\non %s" % str(socket.gethostname()))
+  print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
+        " on %s" % str(socket.gethostname()))
   
   uList={}
   mList={}
@@ -81,12 +104,12 @@ def startServer(port):
             sockfd.settimeout(None)
             if clientType == '0':
               print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-              uList[sockfd.getpeername()] = username
+              uList[sockfd] = username
               sockfd.send(str(m))
               time.sleep(1)
             else:
               print('New UC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-              mList[sockfd.getpeername()] = username
+              mList[sockfd] = username
             sockfd.send(str(p))
             time.sleep(1)
             sockfd.send(str(l))
@@ -94,23 +117,14 @@ def startServer(port):
             sockfd.send(str(e))
             time.sleep(1)
             socket_list.append(sockfd)
-        elif sock == u:
-            (data,address) = u.recvfrom(1024)
-            try:
-              dataNumber = int(data)
-              if dataNumber == l:
-                print('Received l, sending list to connection')
-                sock.send('Unicast: ' + str(uList) + 
-                          'Multicast: ' + str(mList))
-              elif dataNumber == e:
-                print('Received e, goodbye person!')
-                removeClient(sock,uList,mList)
-            except:
-              print(str(address) + ': ' + data)
+        elif sock == u:#received unicast, send to multicast
+            data = handleClientMessage(sock, l, e, uList, mList)
+            if(data[0]):
               ms.sendto(data, (m,p))
-        elif sock == u:
-            #TODO send to unicast
-            pass
+        elif sock == mr:#received multicast, send to each unicast client
+            data = handleClientMessage(sock, l, e, uList, mList)
+            if(data[0]):
+              [uClient.sendto(data) for uClient in uList]
         else:
             # Data received from client, process it
             try:

@@ -52,7 +52,6 @@ def removeClient(s,u,m):
     m.remove(s)
 
 def handleClientMessage(src, m, p, l, e, uList, mList, ms):
-  print('Received message on client')
   (data,address) = src.recvfrom(1024)
   if data == WAHAB_ACK: #don't know why he does this, skipping it
     return
@@ -66,8 +65,7 @@ def handleClientMessage(src, m, p, l, e, uList, mList, ms):
       removeClient(src,uList,mList)
   except:
     print(str(address) + ': ' + data)
-    if src in uList:
-      ms.sendto(data, (m,p))
+    ms.sendto(data, (m,p))
     for cli in uList:
       ms.sendto(data, cli.getpeername())
 

@@ -3,6 +3,7 @@ import select, signal, socket, struct, sys, time
 from random import randint
 
 DEFAULT_PORT=10009
+WAHAB_ACK='!E!T!'
 
 def generateMulticastGroupPort():
   return randint(10000,11001)
@@ -53,6 +54,8 @@ def removeClient(s,u,m):
 def handleClientMessage(src, m, p, l, e, uList, mList, ms):
   print('Received message on client')
   (data,address) = src.recvfrom(1024)
+  if data == WAHAB_ACK: #don't know why he does this, skipping it
+    return
   try:
     dataNumber = int(data)
     if dataNumber == l:
@@ -67,19 +70,18 @@ def handleClientMessage(src, m, p, l, e, uList, mList, ms):
       ms.sendto(data, (m,p))
     for cli in uList:
       ms.sendto(data, cli.getpeername())
-  return (False,0)
 
 def handleNewClient(s, mList, uList, m, p, l, e):
   sockfd, _addr = s.accept()
   username = sockfd.recv(1024)
   sockfd.settimeout(2)
   try: #TCP self buffers, and usually appends the 0 or 1 on username. Catch that case here
-    clientType = sockfd.recv(1)
+    clientType = int(sockfd.recv(1))
   except:
     clientType = int(username[-1])
     username = username[0:-1]
   sockfd.settimeout(None)
-  if clientType == '0':
+  if clientType == 0:
     print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
     mList.append(sockfd)
     sockfd.send(str(m))
@@ -93,6 +95,7 @@ def handleNewClient(s, mList, uList, m, p, l, e):
   time.sleep(1)
   sockfd.send(str(e))
   time.sleep(1)
+  #sockfd.send(WAHAB_ACK)
   return sockfd
     
 def handleOther(sock, uList, mList, m, p, l, e):

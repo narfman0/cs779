@@ -40,9 +40,9 @@ def close(s, u, e, p, host, socketList):
   print('No chars or ctrl-d pressed, quitting')
   u.sendto(str(e),(host,p))
   [s.close() for s in socketList]
-  sys.exit(1)
+  sys.exit(0)
 
-def mcastClient(s, host, port):
+def mcastClient(s, host, port, u):
   s.send('0') # sends "0" & receives M, P, L and E.
   m = s.recv(32).strip()
   p = int(s.recv(5))
@@ -50,7 +50,6 @@ def mcastClient(s, host, port):
   e = int(s.recv(7))
   
   (ur,us) = startMulticastReceiver(m, p)
-  u=createU(s.getsockname())
   print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, us, e, p, host, [s,u,ur,us]))#ctrl-/
@@ -76,13 +75,12 @@ def mcastClient(s, host, port):
       else:
         raise
 
-def unicastClient(s, host):
+def unicastClient(s, host, u):
   s.send('1') # sends "1" & receives P, L and E.
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
   
-  u=createU(s.getsockname())
   print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
   
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
@@ -106,11 +104,12 @@ def startClient(host,port,socketType):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.connect((host, port))
   s.send(getpass.getuser()) # send username
+  u=createU(s.getsockname())
   time.sleep(1)
   if socketType == 'm':
-    mcastClient(s, host, port)
+    mcastClient(s, host, port, u)
   else:
-    unicastClient(s, host)
+    unicastClient(s, host, u)
 
 if __name__ == "__main__":
   if len(sys.argv) != 4:

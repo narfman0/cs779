@@ -65,7 +65,6 @@ def mcastClient(s, host, port, u):
           else:
             print('Remote received: ' + data)
         elif sock == u:
-          print('Received from u!')
           handleFromServer(u, e, l)
         elif sock == sys.stdin:
           handleFromStdin(s, u, e, p, host, [s,u,ur,us])

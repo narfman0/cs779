@@ -1,111 +1,130 @@
 #!/bin/python
-import getpass, os, signal, socket, struct, sys, time
+import getpass, os, select, signal, socket, struct, sys, time
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
 DEFAULT_TYPE='u'
 
 def startMulticastReceiver(group, port):
-  recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-  recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-  recv_sock.bind(('', port))
+  ur = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  ur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  ur.bind((group, port))
   mreq = struct.pack("4sl", socket.inet_aton(group), socket.INADDR_ANY)
-  recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+  ur.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
   
-  send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-  send_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-  return (recv_sock,send_sock)
+  us = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+  us.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+  return (ur,us)
 
-def printSocket(host,port):
-  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  s.bind((host,port))
-  print('Printing messages from ' + str((host,port)))
-  while True:
-    try:
-      (data, address) = s.recvfrom(1024)
-      print(str(address) + ": " + data)
-    except:
-      pass
-  s.close()
-  sys.exit()
+def createU(sockname):
+  u=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)#shouldn't be necessary but if same host it binds over the server soooo
+  u.bind(sockname)
+  return u
 
-def mcastClient(s, host, port):
+def handleFromServer(u, e, l):
+  (data, address) = u.recvfrom(1024)
+  if data != str(e) and data != str(l):
+    print(str(address) + ": " + data)
+  else:
+    print('Remote received: ' + data)
+  
+def handleFromStdin(s, us, e, p, host, socketList):
+  msg = sys.stdin.readline()
+  if msg != '':
+    us.sendto(msg, (host,p))
+  else:
+    close(s, us, e, p, host, socketList)
+  
+def close(s, u, e, p, host, socketList):
+  print('No chars or ctrl-d pressed, quitting')
+  u.sendto(str(e),(host,p))
+  [s.close() for s in socketList]
+  sys.exit(0)
+
+def mcastClient(s, host, port, u):
   s.send('0') # sends "0" & receives M, P, L and E.
   m = s.recv(32).strip()
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
-  print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
-  _recv_sock, _send_sock = startMulticastReceiver(m, p)
   
-def close(s, us, e, listPrinter, socketPrinter):
-  print('No chars or ctrl-d pressed, quitting')
-  us.close()
-  s.send(str(e))
-  s.close()
-  os.kill(listPrinter, signal.SIGKILL)
-  os.kill(socketPrinter, signal.SIGKILL)
-  sys.exit()
-
-def sigQuit(s, us, e, listPrinter, socketPrinter, p):
-  us.sendto(str(e),(host,p))
-  close(s, us, e, listPrinter, socketPrinter)
-
-def printList(host, p):
-  usRead=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  print('Binding to ' + str((host,p)))
-  usRead.bind((host,p))
+  (ur,us) = startMulticastReceiver(m, p)
+  print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
+  
+  if(os.fork() == 0):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while True:
+      try:
+        handleFromServer(u, e, l)
+      except select.error  as ex:
+        if ex[0] == 4:#catch interrupted system call, do nothing
+          continue
+        else:
+          raise
+    return
+    
+  if(os.fork() == 0):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while True:
+      try:
+        (data, address) = ur.recvfrom(1024)
+        if data != str(e) and data != str(l):
+          print(str(address) + ": " + data)
+        else:
+          print('Remote received: ' + data)
+      except select.error  as ex:
+        if ex[0] == 4:#catch interrupted system call, do nothing
+          continue
+        else:
+          raise
+    return
+  
+  signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, us, e, p, host, [s,u,ur,us]))#ctrl-/
   while True:
-    try:
-      data = usRead.recv(1024)
-      if data == '':
-        break
-      print('Printing LIST:\n' + data)
-    except:
-      pass
-  usRead.close()
-  sys.exit()
+    handleFromStdin(s, u, e, p, host, [s,u,ur,us])
 
-def unicastClient(s, host, port):
+def unicastClient(s, host, u):
   s.send('1') # sends "1" & receives P, L and E.
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
-  s.settimeout(1)
-  print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e))
   
-  listPrinter=os.fork()
-  if(listPrinter == 0):
-    printList(host,p)
-  socketPrinter=os.fork()
-  if(socketPrinter == 0):
-    printSocket(host, port)
- 
-  us=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-  signal.signal(signal.SIGINT, lambda signum,frame: us.sendto(str(l),(host,p)))#ctrl-c
-  signal.signal(signal.SIGQUIT, lambda signum,frame: sigQuit(s, us, e, listPrinter, socketPrinter, p))#ctrl-/
+  print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
+  
+  if(os.fork() == 0):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while True:
+      try:
+        handleFromServer(u, e, l)
+      except select.error  as ex:
+        if ex[0] == 4:#catch interrupted system call, do nothing
+          continue
+        else:
+          raise
+    return
+  
+  signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host, [s,u]))#ctrl-/
   while True:
-    msg = sys.stdin.readline().strip()
-    if msg != '':
-      us.sendto(msg,(host,p))
-    else:
-      close(s, us, e, listPrinter, socketPrinter)
+    handleFromStdin(s, u, e, p, host, [s,u])
 
 def startClient(host,port,socketType):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.connect((host, port))
   s.send(getpass.getuser()) # send username
+  u=createU(s.getsockname())
   time.sleep(1)
   if socketType == 'm':
-    mcastClient(s, host, port)
+    mcastClient(s, host, port, u)
   else:
-    unicastClient(s, host, port)
+    unicastClient(s, host, u)
 
 if __name__ == "__main__":
   if len(sys.argv) != 4:
-    print('No <shost> given as argument 1, defaulting to ' + DEFAULT_HOST)
-    print('No <sport> given as argument 2, defaulting to ' + str(DEFAULT_PORT))
-    print('No <u|m> given as argument 3, defaulting to ' + DEFAULT_TYPE)
+    print('Usage: ./UMChatClient <host e.g. ' + DEFAULT_HOST + '> <port e.g. ' + 
+          str(DEFAULT_PORT) + '> <type e.g. ' + DEFAULT_TYPE + '> (examples are used as defaults)')
     host=DEFAULT_HOST
     port=DEFAULT_PORT
     socketType=DEFAULT_TYPE

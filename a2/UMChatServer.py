@@ -1,7 +1,7 @@
 #!/bin/python
-import os, select, signal, socket, struct, sys, time
+import select, signal, socket, struct, sys, time, traceback
 from random import randint
-from SharedList import SharedList
+from multiprocessing.managers import SyncManager
 
 DEFAULT_PORT=10009
 WAHAB_ACK='!E!T!'
@@ -17,8 +17,8 @@ def generateNumber():
 
 def getListString(connected):
   s=''
-  for socket in connected:
-    s += str(socket.getpeername()) + '\n'
+  for peername in connected:
+    s += str(peername) + '\n'
   return s
 
 def getConnectedString(uList, mList):
@@ -47,8 +47,12 @@ def startMulticastReceiver(group, port):
   return (ur,us)
 
 def removeClient(s,u,m):
-  u.remove(s.gethostname()[0])
-  m.remove(s.gethostname()[0])
+  for item in u:
+    if str(item) == str(s.getpeername()):
+      u.remove(item)
+  for item in m:
+    if str(item) == str(s.getpeername()):
+      m.remove(item)
 
 def handleClientMessage(src, m, p, l, e, uList, mList, ms):
   (data,address) = src.recvfrom(1024)
@@ -66,7 +70,7 @@ def handleClientMessage(src, m, p, l, e, uList, mList, ms):
     print(str(address) + ': ' + data)
     ms.sendto(data, (m,p))
     for cli in uList:
-      ms.sendto(data, cli.getpeername())
+      ms.sendto(data, cli)
 
 def handleNewClient(s, mList, uList, m, p, l, e):
   sockfd, _addr = s.accept()
@@ -80,12 +84,12 @@ def handleNewClient(s, mList, uList, m, p, l, e):
   sockfd.settimeout(None)
   if clientType == 0:
     print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-    mList.add(sockfd.gethostname()[0], sockfd.gethostname()[1])
+    mList.append(sockfd.getpeername())
     sockfd.send(str(m))
     time.sleep(1)
   else:
     print('New UC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
-    uList.add(sockfd.gethostname()[0], sockfd.gethostname()[1])
+    uList.append(sockfd.getpeername())
   sockfd.send(str(p))
   time.sleep(1)
   sockfd.send(str(l))
@@ -96,11 +100,16 @@ def handleNewClient(s, mList, uList, m, p, l, e):
   return sockfd
     
 def handleOther(sock, uList, mList, m, p, l, e):
-  sock.recv(1024)
   print "Client went offline"
-  sock.close()
   removeClient(sock,uList,mList)
-                
+  sock.close()
+  return sock
+
+def getSharedLists():
+  manager = SyncManager()
+  manager.start(lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
+  return (manager.list(), manager.list())
+
 def startServer(port):
   l=generateNumber()
   e=generateNumber()
@@ -113,50 +122,33 @@ def startServer(port):
   u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.bind((socket.gethostname(), p))
   (mr,ms) = startMulticastReceiver(m, p)
-  
   print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
         "\ns on %s" % str(s.getsockname()) + " u on %s" % str(u.getsockname()) + 
         "\nmr on %s" % str(mr.getsockname()))
   
-  mList=SharedList()
-  uList=SharedList()
-  
-  if(os.fork() == 0):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while True:
-      try:
-        sock = handleNewClient(s, mList, uList, m, p, l, e)
-        if(os.fork() == 0):
-          handleOther(sock, uList, mList, m, p, l, e)
-      except select.error  as ex:
-        if ex[0] == 4:#catch interrupted system call, do nothing
-          continue
-        else:
-          raise
-    return
-
-  if(os.fork() == 0):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while True:
-      try:
-        handleClientMessage(mr, m, p, l, e, uList, mList, ms)
-      except select.error  as ex:
-        if ex[0] == 4:#catch interrupted system call, do nothing
-          continue
-        else:
-          raise
-    return
-
+  (mList, uList) = getSharedLists()
   signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList))
   signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms]))#ctrl-/
+  socket_list = [sys.stdin, s, u, mr]
   while True:
     try:
-      handleClientMessage(u, m, p, l, e, uList, mList, ms)
-    except select.error  as ex:
-      if ex[0] == 4:#catch interrupted system call, do nothing
-        continue
-      else:
-        raise
+      read_sockets,_w,_e = select.select(socket_list,[],[])
+      for sock in read_sockets:
+        if sock == s:
+          socket_list.append(handleNewClient(s, mList, uList, m, p, l, e))
+        elif sock == u:
+          handleClientMessage(u, m, p, l, e, uList, mList, ms)
+        elif sock == mr:
+          handleClientMessage(u, m, p, l, e, uList, mList, ms)
+        elif sock == sys.stdin:
+          if sys.stdin.readline() == 'exit':
+            close([s,u,mr,ms])
+        else:
+          socket_list.remove(handleOther(sock, uList, mList, m, p, l, e))
+    except:
+      #traceback.print_exc()
+      #Ctrl-c perhaps, just pass
+      pass
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:

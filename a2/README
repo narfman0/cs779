@@ -1,4 +1,4 @@
-jrobison solution for A3
+jrobison solution for A2
 To test:
 ./UMChatServer.py 10123
 ./UMChatClient.py 127.0.0.1 10123 u

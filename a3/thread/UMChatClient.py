@@ -43,7 +43,6 @@ def close(s, u, e, p, host, socketList):
   sys.exit(0)
 
 def handleFromClientForever(ur,e,l):
-  signal.signal(signal.SIGINT, signal.SIG_IGN)
   while True:
     try:
       (data, address) = ur.recvfrom(1024)
@@ -81,7 +80,6 @@ def mcastClient(s, host, port, u):
     handleFromStdin(s, u, e, p, host, [s,u,ur,us])
 
 def handleFromServerForever(u,e,l):
-  signal.signal(signal.SIGINT, signal.SIG_IGN)
   while True:
     try:
       handleFromServer(u, e, l)

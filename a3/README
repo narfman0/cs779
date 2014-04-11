@@ -1,5 +1,5 @@
 jrobison solution for A3
-To test:
+To test, cd in to select or thread directories, and run:
 ./UMChatServer.py 10123
 ./UMChatClient.py 127.0.0.1 10123 u
 ./UMChatClient.py 127.0.0.1 10123 m

@@ -1,5 +1,5 @@
 #!/bin/python
-import getpass, os, select, signal, socket, struct, sys, time
+import getpass, signal, socket, struct, sys, threading, time
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
@@ -51,7 +51,7 @@ def handleFromClientForever(ur,e,l):
         print(str(address) + ": " + data)
       else:
         print('Remote received: ' + data)
-    except select.error  as ex:
+    except socket.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue
       else:
@@ -67,13 +67,13 @@ def mcastClient(s, host, port, u):
   (ur,us) = startMulticastReceiver(m, p)
   print('Connected with m=' + m + ' p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
   
-  if(os.fork() == 0):
-    handleFromServerForever(u,e,l)
-    return
-    
-  if(os.fork() == 0):
-    handleFromClientForever(ur,e,l)
-    return
+  t = threading.Thread(target=handleFromServerForever, args = (u,e,l))
+  t.daemon = True
+  t.start()
+  
+  t = threading.Thread(target=handleFromClientForever, args = (ur,e,l))
+  t.daemon = True
+  t.start()
   
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, us, e, p, host, [s,u,ur,us]))#ctrl-/
@@ -85,7 +85,7 @@ def handleFromServerForever(u,e,l):
   while True:
     try:
       handleFromServer(u, e, l)
-    except select.error  as ex:
+    except socket.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue
       else:
@@ -99,9 +99,9 @@ def unicastClient(s, host, u):
   
   print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
   
-  if(os.fork() == 0):
-    handleFromServerForever(u,e,l)
-    return
+  t = threading.Thread(target=handleFromServerForever, args = (u,e,l))
+  t.daemon = True
+  t.start()
   
   signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host, [s,u]))#ctrl-/

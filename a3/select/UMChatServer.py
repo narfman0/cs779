@@ -121,8 +121,8 @@ def startServer(port):
   
   uList=[]
   mList=[]
-  signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList))
-  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms]))#ctrl-/
+  signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms]))#ctrl-\
   socket_list = [sys.stdin, s, u, mr]
   while True:
     try:
@@ -139,9 +139,12 @@ def startServer(port):
             close([s,u,mr,ms])
         else:
           socket_list.remove(handleOther(sock, uList, mList, m, p, l, e))
-    except:
+    except (select.error, socket.error) as ex:
       #Ctrl-c perhaps, just pass
-      pass
+      if ex[0] == 4:#catch interrupted system call, do nothing
+        continue
+      else:
+        raise
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:

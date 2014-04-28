@@ -52,8 +52,7 @@ def removeClient(s,uList,mList,sList):
     if s in clientList:
       clientList.remove(s)
 
-def handleClientMessage(src, m, p, l, e, uList, mList, sList, ms):
-  (data,address) = src.recvfrom(1024)
+def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms):
   if data == WAHAB_ACK: #don't know why he does this, skipping it
     return
   try:
@@ -70,24 +69,12 @@ def handleClientMessage(src, m, p, l, e, uList, mList, sList, ms):
     for cli in uList:
       ms.sendto(data, cli.getpeername())
 
-def handleNewClient(s, mList, uList, sList, m, p, l, e):
-  sockfd, _addr = s.accept()
-  username = sockfd.recv(1024)
-  sockfd.settimeout(2)
-  try: #TCP self buffers, and usually appends the 0 or 1 on username. Catch that case here
-    clientType = int(sockfd.recv(1))
-  except:
-    try:
-      clientType = int(username[-1])
-      username = username[0:-1]
-    except:
-      clientType = 2
-  sockfd.settimeout(None)
+def handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e):
   if clientType == 0:
     print('New MC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
     mList.append(sockfd)
     sockfd.send(str(m))
-    time.sleep(1)
+    time.sleep(.1)
   elif clientType == 1:
     print('New UC Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
     uList.append(sockfd)
@@ -95,11 +82,11 @@ def handleNewClient(s, mList, uList, sList, m, p, l, e):
     print('New SCTP Client: ' + str(sockfd.getpeername()) + '[' + username + ']')
     sList.append(sockfd)
   sockfd.send(str(p))
-  time.sleep(1)
+  time.sleep(.1)
   sockfd.send(str(l))
-  time.sleep(1)
+  time.sleep(.1)
   sockfd.send(str(e))
-  time.sleep(1)
+  time.sleep(.1)
   #sockfd.send(WAHAB_ACK)
   return sockfd
     
@@ -122,29 +109,49 @@ def startServer(port):
   u.bind((socket.gethostname(), p))
   (mr,ms) = startMulticastReceiver(m, p)
   sk = sctp.sctpsocket_tcp(socket.AF_INET)
+  sk.bind((socket.gethostname(), port))
+  q = sctp.sctpsocket_udp(socket.AF_INET)
+  q.bind((socket.gethostname(), port+1))
   
   print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
         "\ns on %s" % str(s.getsockname()) + " u on %s" % str(u.getsockname()) + 
-        "\nmr on %s" % str(mr.getsockname()) + ' sk on %s' % str(sk.getsockname()))
+        "\nmr on %s" % str(mr.getsockname()) + ' sk on %s' % str(sk.getsockname()) +
+        "\nq on %s" % str(q.getsockname()))
   
   uList=[]
   mList=[]
   sList=[]
   signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList, sList))#ctrl-c
-  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms,sk]))#ctrl-\
-  socket_list = [sys.stdin, s, u, mr, sk]
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms,sk,q]))#ctrl-\
+  socket_list = [sys.stdin, s, u, mr, sk, q]
   while True:
     try:
       read_sockets,_w,_e = select.select(socket_list,[],[])
       for sock in read_sockets:
         if sock == s:
-          socket_list.append(handleNewClient(s, mList, uList, sList, m, p, l, e))
+          sockfd, _addr = s.accept()
+          username = sockfd.recv(1024)
+          sockfd.settimeout(2)
+          try: #TCP self buffers, and usually appends the 0 or 1 on username. Catch that case here
+            clientType = int(sockfd.recv(1))
+          except:
+            clientType = int(username[-1])
+            username = username[0:-1]
+          sockfd.settimeout(None)
+          socket_list.append(handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e))
         elif sock == u:
-          handleClientMessage(u, m, p, l, e, uList, mList, sList, ms)
+          data,address = u.recvfrom(1024)
+          handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms)
         elif sock == mr:
-          handleClientMessage(u, m, p, l, e, uList, mList, sList, ms)
+          data,address = mr.recvfrom(1024)#note was u in a3
+          handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms)
+        elif sock == q:
+          address,_flags,data,_notif = q.sctp_recv(1024)
+          handleClientMessage(data,address, q, m, p, l, e, uList, mList, sList, ms)
         elif sock == sk:
-          socket_list.append(handleNewClient(sk, mList, uList, sList, m, p, l, e))
+          sockfd, _addr = s.accept()
+          _fromaddr,_flags,username,_notif = sockfd.sctp_recv(1024)
+          socket_list.append(handleNewClient(sockfd, 2, username, mList, uList, sList, m, p, l, e))
         elif sock == sys.stdin:
           if sys.stdin.readline() == 'exit':
             close([s,u,mr,ms,sk])

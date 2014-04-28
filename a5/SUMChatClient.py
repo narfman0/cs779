@@ -1,5 +1,5 @@
 #!/bin/python
-import getpass, select, signal, socket, struct, sys, time
+import getpass, sctp, select, signal, socket, struct, sys, time
 
 DEFAULT_HOST=socket.gethostname()
 DEFAULT_PORT=10009
@@ -99,16 +99,49 @@ def unicastClient(s, host, u):
       else:
         raise
 
-def startClient(host,port,socketType):
-  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def sctpClient(host, port):
+  s = sctp.sctpsocket_tcp(socket.AF_INET)
   s.connect((host, port))
   s.send(getpass.getuser()) # send username
-  u=createU(s.getsockname())
-  time.sleep(1)
-  if socketType == 'm':
-    mcastClient(s, host, port, u)
+    
+  p = int(s.recv(5))
+  l = int(s.recv(7))
+  e = int(s.recv(7))
+  
+  print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
+  
+  signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host, [s,u]))#ctrl-/
+  socket_list = [sys.stdin, u]
+  while True:
+    try:
+      read_sockets, _w, _e = select.select(socket_list , [], [])
+      for sock in read_sockets:
+        if sock == u:
+          handleFromServer(u, e, l)
+        elif sock == sys.stdin:
+          handleFromStdin(s, u, e, p, host, [s,u])
+    except select.error  as ex:
+      if ex[0] == 4:#catch interrupted system call, do nothing
+        continue
+      else:
+        raise
+
+def startClient(host,port,socketType):
+  if socketType == 's':
+    sctpClient(host, port)
   else:
-    unicastClient(s, host, u)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    s.send(getpass.getuser()) # send username
+    time.sleep(1)
+    u=createU(s.getsockname())
+    if socketType == 'm':
+      mcastClient(s, host, port, u)
+    elif socketType == 'u':
+      unicastClient(s, host, u)
+    else:
+      print('Unknown socket type: ' + socketType)
 
 if __name__ == "__main__":
   if len(sys.argv) != 4:

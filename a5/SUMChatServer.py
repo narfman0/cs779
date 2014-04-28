@@ -1,8 +1,8 @@
 #!/bin/python
-import netifaces, sctp, select, signal, socket, struct, sys, time
+import sctp, select, signal, socket, struct, sys, time
 from random import randint
 
-DEFAULT_PORT=10009
+DEFAULT_PORT=10019
 WAHAB_ACK='!E!T!'
 
 def generateMulticastGroupPort():
@@ -98,13 +98,6 @@ def handleOther(sock, uList, mList, sList, m, p, l, e):
   sock.close()
   return sock
 
-def isMe(addr):
-  for interface in netifaces.interfaces():
-    for ilist in netifaces.ifaddresses(interface)[netifaces.AF_INET]:
-      if ilist['addr'] == addr:
-        return True
-  return False
-                
 def startServer(port):
   l=generateNumber()
   e=generateNumber()
@@ -112,13 +105,13 @@ def startServer(port):
   m=generateMulticastGroupIP()
   
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  s.bind((socket.gethostname(), port))
+  s.bind(('', port))
   s.listen(1)
   u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.bind((socket.gethostname(), p))
   (mr,ms) = startMulticastReceiver(m, p)
   sk = sctp.sctpsocket_tcp(socket.AF_INET)
-  sk.bind((socket.gethostname(), port))
+  sk.bind(('', port))
   q = sctp.sctpsocket_udp(socket.AF_INET)
   q.bind((socket.gethostname(), port+1))
   
@@ -132,6 +125,7 @@ def startServer(port):
   sList=[]
   signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList, sList))#ctrl-c
   signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms,sk,q]))#ctrl-\
+  last=''
   socket_list = [sys.stdin, s, u, mr, sk, q]
   while True:
     try:
@@ -150,15 +144,18 @@ def startServer(port):
           socket_list.append(handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e))
         elif sock == u:
           data,address = u.recvfrom(1024)
-          if not isMe(address):
+          if last != data:
+            last=data
             handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms, q)
         elif sock == mr:
           data,address = mr.recvfrom(1024)#note was u in a3
-          if not isMe(address):
+          if last != data:
+            last=data
             handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms, q)
         elif sock == q:
           address,_flags,data,_notif = q.sctp_recv(1024)
-          if not isMe(address):
+          if last != data:
+            last=data
             handleClientMessage(data,address, q, m, p, l, e, uList, mList, sList, ms, q)
         elif sock == sk:
           sockfd, _addr = s.accept()

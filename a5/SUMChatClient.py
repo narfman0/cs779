@@ -2,7 +2,7 @@
 import getpass, sctp, select, signal, socket, struct, sys, time
 
 DEFAULT_HOST=socket.gethostname()
-DEFAULT_PORT=10009
+DEFAULT_PORT=10019
 DEFAULT_TYPE='u'
 
 def startMulticastReceiver(group, port):
@@ -103,7 +103,7 @@ def sctpClient(host, port):
   s = sctp.sctpsocket_tcp(socket.AF_INET)
   s.connect((host, port))
   s.send(getpass.getuser()) # send username
-  q = sctp.sctpsocket_tcp(socket.AF_INET)
+  q = sctp.sctpsocket_udp(socket.AF_INET)
   q.connect((host, port+1))
     
   p = int(s.recv(5))

@@ -125,7 +125,7 @@ def startServer(port):
   
   print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
         "\ns on %s" % str(s.getsockname()) + " u on %s" % str(u.getsockname()) + 
-        "\nmr on %s" % str(mr.getsockname()))
+        "\nmr on %s" % str(mr.getsockname()) + ' sk on %s' % str(sk.getsockname()))
   
   uList=[]
   mList=[]

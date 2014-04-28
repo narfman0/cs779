@@ -1,5 +1,5 @@
 #!/bin/python
-import sctp, select, signal, socket, struct, sys, time
+import netifaces, sctp, select, signal, socket, struct, sys, time
 from random import randint
 
 DEFAULT_PORT=10009
@@ -52,7 +52,7 @@ def removeClient(s,uList,mList,sList):
     if s in clientList:
       clientList.remove(s)
 
-def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms):
+def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms, sctp):
   if data == WAHAB_ACK: #don't know why he does this, skipping it
     return
   try:
@@ -68,6 +68,8 @@ def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms)
     ms.sendto(data, (m,p))
     for cli in uList:
       ms.sendto(data, cli.getpeername())
+    for cli in sList:
+      sctp.sendto(data, cli.getpeername())
 
 def handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e):
   if clientType == 0:
@@ -95,6 +97,13 @@ def handleOther(sock, uList, mList, sList, m, p, l, e):
   removeClient(sock,uList,mList,sList)
   sock.close()
   return sock
+
+def isMe(addr):
+  for interface in netifaces.interfaces():
+    for ilist in netifaces.ifaddresses(interface)[netifaces.AF_INET]:
+      if ilist['addr'] == addr:
+        return True
+  return False
                 
 def startServer(port):
   l=generateNumber()
@@ -141,13 +150,16 @@ def startServer(port):
           socket_list.append(handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e))
         elif sock == u:
           data,address = u.recvfrom(1024)
-          handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms)
+          if not isMe(address):
+            handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms, q)
         elif sock == mr:
           data,address = mr.recvfrom(1024)#note was u in a3
-          handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms)
+          if not isMe(address):
+            handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms, q)
         elif sock == q:
           address,_flags,data,_notif = q.sctp_recv(1024)
-          handleClientMessage(data,address, q, m, p, l, e, uList, mList, sList, ms)
+          if not isMe(address):
+            handleClientMessage(data,address, q, m, p, l, e, uList, mList, sList, ms, q)
         elif sock == sk:
           sockfd, _addr = s.accept()
           _fromaddr,_flags,username,_notif = sockfd.sctp_recv(1024)

@@ -103,24 +103,29 @@ def sctpClient(host, port):
   s = sctp.sctpsocket_tcp(socket.AF_INET)
   s.connect((host, port))
   s.send(getpass.getuser()) # send username
+  q = sctp.sctpsocket_tcp(socket.AF_INET)
+  q.connect((host, port+1))
     
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
   
-  print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + ' bound to ' + str(u.getsockname()))
+  print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + 
+        ' s bound to ' + str(s.getsockname()) + ' q bound to ' + str(q.getsockname()))
   
-  signal.signal(signal.SIGINT, lambda signum,frame: u.sendto(str(l),(host,p)))#ctrl-c
-  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, u, e, p, host, [s,u]))#ctrl-/
-  socket_list = [sys.stdin, u]
+  signal.signal(signal.SIGINT, lambda signum,frame: s.sendto(str(l),(host,p)))#ctrl-c
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, q, e, p, host, [s,q]))#ctrl-/
+  socket_list = [sys.stdin, s,q]
   while True:
     try:
       read_sockets, _w, _e = select.select(socket_list , [], [])
       for sock in read_sockets:
-        if sock == u:
-          handleFromServer(u, e, l)
+        if sock == s:
+          handleFromServer(s, e, l)
+        elif sock == q:
+          handleFromServer(q, e, l)
         elif sock == sys.stdin:
-          handleFromStdin(s, u, e, p, host, [s,u])
+          handleFromStdin(s, e, p, host, [s])
     except select.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue

@@ -2,7 +2,7 @@
 import sctp, select, signal, socket, struct, sys, time
 from random import randint
 
-DEFAULT_PORT=10019
+DEFAULT_PORT=10039
 WAHAB_ACK='!E!T!'
 
 def generateMulticastGroupPort():
@@ -112,7 +112,7 @@ def startServer(port):
   (mr,ms) = startMulticastReceiver(m, p)
   sk = sctp.sctpsocket_udp(socket.AF_INET)
   sk.bind(('', port))
-  sk.listen()
+  sk.listen(1)
   
   print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
         "\ns on %s" % str(s.getsockname()) + " u on %s" % str(u.getsockname()) + 

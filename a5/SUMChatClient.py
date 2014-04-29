@@ -2,7 +2,7 @@
 import getpass, sctp, select, signal, socket, struct, sys, time
 
 DEFAULT_HOST=socket.gethostname()
-DEFAULT_PORT=10019
+DEFAULT_PORT=10039
 DEFAULT_TYPE='u'
 
 def startMulticastReceiver(group, port):
@@ -28,7 +28,7 @@ def handleFromServer(data, address, e, l):
   else:
     print('Remote received: ' + data)
   
-def handleFromStdin(s, us, e, p, host, socketList):
+def handleFromStdin(s, clientType, us, e, p, host, socketList):
   msg = sys.stdin.readline()
   if msg != '':
     us.sendto(msg, (host,p))
@@ -42,7 +42,8 @@ def close(s, u, e, p, host, socketList):
   sys.exit(0)
 
 def mcastClient(s, host, port, u):
-  s.send('0') # sends "0" & receives M, P, L and E.
+  clientType=0
+  s.send(str(clientType)) # sends "0" & receives M, P, L and E.
   m = s.recv(32).strip()
   p = int(s.recv(5))
   l = int(s.recv(7))
@@ -67,7 +68,7 @@ def mcastClient(s, host, port, u):
           data, address = u.recvfrom(1024)
           handleFromServer(data, address, e, l)
         elif sock == sys.stdin:
-          handleFromStdin(s, u, e, p, host, [s,u,ur,us])
+          handleFromStdin(s, 0, u, e, p, host, [s,u,ur,us])
     except select.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue
@@ -75,7 +76,8 @@ def mcastClient(s, host, port, u):
         raise
 
 def unicastClient(s, host, u):
-  s.send('1') # sends "1" & receives P, L and E.
+  clientType=1
+  s.send(str(clientType)) # sends "1" & receives P, L and E.
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
@@ -92,7 +94,7 @@ def unicastClient(s, host, u):
         if sock == u:
           handleFromServer(u, e, l)
         elif sock == sys.stdin:
-          handleFromStdin(s, u, e, p, host, [s,u])
+          handleFromStdin(s, clientType, u, e, p, host, [s,u])
     except select.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue
@@ -100,6 +102,8 @@ def unicastClient(s, host, u):
         raise
 
 def sctpClient(host, port, s):
+  clientType=2
+  s.send(str(clientType))
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
@@ -124,7 +128,7 @@ def sctpClient(host, port, s):
           address, _flags, data, _notif = sockfd.sctp_recv(1024)
           handleFromServer(data, address, e, l)
         elif sock == sys.stdin:
-          handleFromStdin(s, e, p, host, [s])
+          handleFromStdin(s, clientType, sk, e, p, host, [s])
     except select.error  as ex:
       if ex[0] == 4:#catch interrupted system call, do nothing
         continue

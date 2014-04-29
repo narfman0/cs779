@@ -52,24 +52,24 @@ def removeClient(s,uList,mList,sList):
     if s in clientList:
       clientList.remove(s)
 
-def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms, sctp):
+def handleClientMessage(data, address, src, m, p, l, e, uList, mList, sList, ms):
   if data == WAHAB_ACK: #don't know why he does this, skipping it
     return
   try:
     dataNumber = int(data)
     if dataNumber == l:
       print('Received l from ' + str(address) + ', sending list')
-      ms.sendto(getConnectedString(uList, mList, sList), address)
+      src.sendto(getConnectedString(uList, mList, sList), address)
     elif dataNumber == e:
       print('Received e, goodbye ' + str(address))
       removeClient(src,uList,mList,sList)
   except:
     print(str(address) + ': ' + data)
-    ms.sendto(data, (m,p))
-    for cli in uList:
+    ms.sendto(data, (m,p))#send message to multicast group
+    for cli in uList:#send message to all unicast clients
       ms.sendto(data, cli.getpeername())
-    for cli in sList:
-      sctp.sendto(data, cli.getpeername())
+    for cli in sList:#send message to all sctp clients
+      cli.sendto(data, cli.getpeername())
 
 def handleNewClient(sockfd, clientType, username, mList, uList, sList, m, p, l, e):
   if clientType == 0:
@@ -110,23 +110,21 @@ def startServer(port):
   u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   u.bind((socket.gethostname(), p))
   (mr,ms) = startMulticastReceiver(m, p)
-  sk = sctp.sctpsocket_tcp(socket.AF_INET)
+  sk = sctp.sctpsocket_udp(socket.AF_INET)
   sk.bind(('', port))
-  q = sctp.sctpsocket_udp(socket.AF_INET)
-  q.bind((socket.gethostname(), port+1))
+  sk.listen()
   
   print("Using l=" + str(l) + ' e=' + str(e) + ' p=' + str(p) + ' m=' + str(m) + 
         "\ns on %s" % str(s.getsockname()) + " u on %s" % str(u.getsockname()) + 
-        "\nmr on %s" % str(mr.getsockname()) + ' sk on %s' % str(sk.getsockname()) +
-        "\nq on %s" % str(q.getsockname()))
+        "\nmr on %s" % str(mr.getsockname()) + ' sk on %s' % str(sk.getsockname()))
   
   uList=[]
   mList=[]
   sList=[]
   signal.signal(signal.SIGINT, lambda signum,frame: printConnected(uList, mList, sList))#ctrl-c
-  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms,sk,q]))#ctrl-\
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close([s,u,mr,ms,sk]))#ctrl-\
   last=''
-  socket_list = [sys.stdin, s, u, mr, sk, q]
+  socket_list = [sys.stdin, s, u, mr, sk]
   while True:
     try:
       read_sockets,_w,_e = select.select(socket_list,[],[])
@@ -146,21 +144,17 @@ def startServer(port):
           data,address = u.recvfrom(1024)
           if last != data:
             last=data
-            handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms, q)
+            handleClientMessage(data,address, u,m, p, l, e, uList, mList, sList, ms)
         elif sock == mr:
           data,address = mr.recvfrom(1024)#note was u in a3
           if last != data:
             last=data
-            handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms, q)
-        elif sock == q:
-          address,_flags,data,_notif = q.sctp_recv(1024)
+            handleClientMessage(data,address, mr, m, p, l, e, uList, mList, sList, ms)
+        elif sock == sk:
+          address,_flags,data,_notif = sk.sctp_recv(1024)
           if last != data:
             last=data
-            handleClientMessage(data,address, q, m, p, l, e, uList, mList, sList, ms, q)
-        elif sock == sk:
-          sockfd, _addr = s.accept()
-          _fromaddr,_flags,username,_notif = sockfd.sctp_recv(1024)
-          socket_list.append(handleNewClient(sockfd, 2, username, mList, uList, sList, m, p, l, e))
+            handleClientMessage(data,address, sk, m, p, l, e, uList, mList, sList, ms)
         elif sock == sys.stdin:
           if sys.stdin.readline() == 'exit':
             close([s,u,mr,ms,sk])

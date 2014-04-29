@@ -22,8 +22,7 @@ def createU(sockname):
   u.bind(sockname)
   return u
 
-def handleFromServer(u, e, l):
-  (data, address) = u.recvfrom(1024)
+def handleFromServer(data, address, e, l):
   if data != str(e) and data != str(l):
     print(str(address) + ": " + data)
   else:
@@ -65,7 +64,8 @@ def mcastClient(s, host, port, u):
           else:
             print('Remote received: ' + data)
         elif sock == u:
-          handleFromServer(u, e, l)
+          data, address = u.recvfrom(1024)
+          handleFromServer(data, address, e, l)
         elif sock == sys.stdin:
           handleFromStdin(s, u, e, p, host, [s,u,ur,us])
     except select.error  as ex:
@@ -99,31 +99,30 @@ def unicastClient(s, host, u):
       else:
         raise
 
-def sctpClient(host, port):
-  s = sctp.sctpsocket_tcp(socket.AF_INET)
-  s.connect((host, port))
-  s.send(getpass.getuser()) # send username
-  q = sctp.sctpsocket_udp(socket.AF_INET)
-  q.connect((host, port+1))
-    
+def sctpClient(host, port, s):
   p = int(s.recv(5))
   l = int(s.recv(7))
   e = int(s.recv(7))
   
+  sk = sctp.sctpsocket_tcp(socket.AF_INET)
+  sk.connect((host, port))
+  
   print('Connected with p=' + str(p) + ' l='+ str(l) + ' e=' + str(e) + 
-        ' s bound to ' + str(s.getsockname()) + ' q bound to ' + str(q.getsockname()))
+        ' s bound to ' + str(s.getsockname()) + ' sk bound to ' + str(sk.getsockname()))
   
   signal.signal(signal.SIGINT, lambda signum,frame: s.sendto(str(l),(host,p)))#ctrl-c
-  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, q, e, p, host, [s,q]))#ctrl-/
-  socket_list = [sys.stdin, s,q]
+  signal.signal(signal.SIGQUIT, lambda signum,frame: close(s, e, p, host, [s]))#ctrl-/
+  socket_list = [sys.stdin, s, sk]
   while True:
     try:
       read_sockets, _w, _e = select.select(socket_list , [], [])
       for sock in read_sockets:
         if sock == s:
-          handleFromServer(s, e, l)
-        elif sock == q:
-          handleFromServer(q, e, l)
+          data, address = u.recvfrom(1024)
+          handleFromServer(data, address, e, l)
+        if sock == sk:
+          address, _flags, data, _notif = sockfd.sctp_recv(1024)
+          handleFromServer(data, address, e, l)
         elif sock == sys.stdin:
           handleFromStdin(s, e, p, host, [s])
     except select.error  as ex:
@@ -133,13 +132,13 @@ def sctpClient(host, port):
         raise
 
 def startClient(host,port,socketType):
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  s.connect((host, port))
+  s.send(getpass.getuser()) # send username
+  time.sleep(.1)
   if socketType == 's':
-    sctpClient(host, port)
+    sctpClient(host, port, s)
   else:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, port))
-    s.send(getpass.getuser()) # send username
-    time.sleep(1)
     u=createU(s.getsockname())
     if socketType == 'm':
       mcastClient(s, host, port, u)
